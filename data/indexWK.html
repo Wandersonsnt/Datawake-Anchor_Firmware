@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Configuração WiFi</title>
+    <!-- Icones gerados no site https://favicon.io/favicon-converter/ -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f4f4f4; }
+        .card { background: white; border: 1px solid #ddd; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
+        h2 { color: #333; }
+        h3 { margin-bottom: 10px; margin-top: 30px; border-top: 2px solid #eee; padding-top: 10px; }
+        input { padding: 10px; margin: 5px 0; width: 90%; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { padding: 12px; background: #da4b4b; color: white; border: none; width: 100%; margin-top: 10px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        button:hover { background: #9e3636; }
+        button:focus { outline: none; box-shadow: 0 0 0 2px rgb(0, 0, 0); }
+        .btn-scan { background: #17a2b8; }
+        .btn-scan:hover { background: #138496; }
+        .secondary { background: #6c757d; }
+        .secondary:hover { background: #5a6268; }
+        
+        /* Lista de Redes */
+        #wifi-list { list-style: none; padding: 0; text-align: left; max-height: 250px; overflow-y: auto; border: 1px solid #eee; margin-top: 10px; display: none; width: 90%; margin-left: 5%; border-radius: 4px; box-sizing: border-box;}
+        #wifi-list li { padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+        #wifi-list li:hover { background-color: #f1f1f1; }
+
+        .net-info { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+        .net-signal { display: flex; align-items: center; gap: 5px; color: #666; font-size: 0.9em; }
+
+        .icon { width: 20px; height: 20px; fill: currentColor; }
+        .icon-lock { color: #666; width: 16px; height: 16px; }
+        .signal-good { color: #28a745; }
+        .signal-med { color: #ffc107; }
+        .signal-bad { color: #dc3545; }
+
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 5px; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* --- ESTILOS PARA O BOTÃO DESLIZANTE (SWITCH) --- */
+        .switch { position: relative; display: inline-block; width: 44px; height: 22px; margin-top: 5px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 22px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #17a2b8; }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        /* --- ESTILOS PARA OS GRUPOS E OCULTAÇÃO --- */
+        .toggle-group { display: flex; align-items: center; justify-content: space-between; margin: 15px 5% 5px 5%; text-align: left; font-weight: bold; font-size: 0.9em; color: #333;}
+        .hidden { display: none !important; }
+
+        /* --- ESTILOS PARA OS CAMPOS DE ARQUIVO --- */
+        .file-group { margin: 10px 5%; text-align: left; background: #eeeeee; padding: 10px; border: 1px solid #eee; border-radius: 4px; }
+        .file-group label { display: block; font-size: 0.85em; font-weight: bold; margin-bottom: 5px; color: #333333; }
+        .file-group input[type="file"] { width: 100%; font-size: 0.8em; }
+
+        /* ESTILOS DO POPUP (MODAL) */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal-content {
+            background: white; padding: 25px; border-radius: 8px; text-align: center;
+            max-width: 320px; width: 80%; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .modal-content h3 { margin-top: 0; border: none; padding: 0; color: #333; }
+        .modal-content p { color: #555; margin: 15px 0; line-height: 1.5; }
+        .modal-btn { background: #17a2b8; width: auto; padding: 10px 20px; }
+        .modal-btn:hover { background: #138496; }
+    </style>
+    <script>
+        const svgLock = '<svg class="icon-lock" viewBox="0 0 24 24"><path d="M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6-9h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zM9 6a3 3 0 1 1 6 0v2H9V6z"/></svg>';
+        const svgHigh = '<svg class="icon" viewBox="0 0 24 24"><path d="M12 3C7.8 3 3.7 4.4 0.4 7c-.6.5-.7 1.5-.1 2.1l1.6 1.8c.5.6 1.5.7 2.1.2 2.2-1.7 5-2.7 7.9-2.7s5.7 1 7.9 2.7c.6.5 1.6.4 2.1-.2l1.7-1.8c.6-.6.5-1.6-.1-2.1C20.3 4.4 16.2 3 12 3zm0 6c-2.8 0-5.5.9-7.7 2.6-.6.5-.7 1.4-.2 2l1.7 1.8c.5.6 1.4.6 2 .2 1.2-.9 2.7-1.4 4.2-1.4s3 .5 4.2 1.4c.6.4 1.5.4 2-.2l1.7-1.8c.5-.6.4-1.5-.2-2C17.5 9.9 14.8 9 12 9zm0 6c-1.3 0-2.6.4-3.7 1.2-.6.5-.7 1.4-.2 2L12 22l3.9-3.8c.5-.6.4-1.5-.2-2-1.1-.8-2.4-1.2-3.7-1.2z"/></svg>';
+        const svgMed = '<svg class="icon" viewBox="0 0 24 24"><path fill-opacity="0.3" d="M12 3C7.8 3 3.7 4.4 0.4 7c-.6.5-.7 1.5-.1 2.1l1.6 1.8c.5.6 1.5.7 2.1.2 2.2-1.7 5-2.7 7.9-2.7s5.7 1 7.9 2.7c.6.5 1.6.4 2.1-.2l1.7-1.8c.6-.6.5-1.6-.1-2.1C20.3 4.4 16.2 3 12 3z"/><path d="M12 9c-2.8 0-5.5.9-7.7 2.6-.6.5-.7 1.4-.2 2l1.7 1.8c.5.6 1.4.6 2 .2 1.2-.9 2.7-1.4 4.2-1.4s3 .5 4.2 1.4c.6.4 1.5.4 2-.2l1.7-1.8c.5-.6.4-1.5-.2-2C17.5 9.9 14.8 9 12 9zm0 6c-1.3 0-2.6.4-3.7 1.2-.6.5-.7 1.4-.2 2L12 22l3.9-3.8c.5-.6.4-1.5-.2-2-1.1-.8-2.4-1.2-3.7-1.2z"/></svg>';
+        const svgLow = '<svg class="icon" viewBox="0 0 24 24"><path fill-opacity="0.3" d="M12 3C7.8 3 3.7 4.4 0.4 7c-.6.5-.7 1.5-.1 2.1l1.6 1.8c.5.6 1.5.7 2.1.2 2.2-1.7 5-2.7 7.9-2.7s5.7 1 7.9 2.7c.6.5 1.6.4 2.1-.2l1.7-1.8c.6-.6.5-1.6-.1-2.1C20.3 4.4 16.2 3 12 3zm0 6c-2.8 0-5.5.9-7.7 2.6-.6.5-.7 1.4-.2 2l1.7 1.8c.5.6 1.4.6 2 .2 1.2-.9 2.7-1.4 4.2-1.4s3 .5 4.2 1.4c.6.4 1.5.4 2-.2l1.7-1.8c.5-.6.4-1.5-.2-2C17.5 9.9 14.8 9 12 9z"/><path d="M12 15c-1.3 0-2.6.4-3.7 1.2-.6.5-.7 1.4-.2 2L12 22l3.9-3.8c.5-.6.4-1.5-.2-2-1.1-.8-2.4-1.2-3.7-1.2z"/></svg>';
+
+        function toggleDhcpOptions(prefix) { // Função para gerenciar os campos de DHCP/IP Fixo
+            var useDhcp = document.getElementById(prefix + "_dhcp").checked;
+            var staticFields = document.getElementById(prefix + "_static_fields");
+            var inputs = staticFields.querySelectorAll("input");
+
+            if (useDhcp) {
+                staticFields.classList.add("hidden");
+                // Remove a obrigatoriedade dos campos se DHCP estiver ativo
+                inputs.forEach(input => input.required = false);
+            } else {
+                staticFields.classList.remove("hidden");
+                // Torna os campos obrigatórios se for IP fixo
+                inputs.forEach(input => input.required = true);
+            }
+        }
+
+        function toggleNetworkOptions() {
+            var useEth = document.getElementById("use_eth").checked;
+            var useWifi = document.getElementById("use_wifi").checked;
+            var wifiSection = document.getElementById("wifi_config_section");
+            var ethSection = document.getElementById("eth_config_section");
+            var priorityNote = document.getElementById("priority-note");
+            var ssidInput = document.getElementById("sta_ssid");
+
+            // Exibe ou oculta a seção Wi-Fi
+            if (useWifi) {
+                wifiSection.classList.remove("hidden");
+                ssidInput.required = true; // Torna o SSID obrigatório apenas se o Wi-Fi for usado
+            } else {
+                wifiSection.classList.add("hidden");
+                ssidInput.required = false; // Remove a obrigatoriedade para permitir salvar
+            }
+
+            // Exibe a seção Ethernet
+            if (useEth) {
+                ethSection.classList.remove("hidden");
+            } else {
+                ethSection.classList.add("hidden");
+            }
+
+            // Exibe o aviso de prioridade se ambos estiverem marcados
+            if (useEth && useWifi) {
+                priorityNote.style.display = "block";
+            } else {
+                priorityNote.style.display = "none";
+            }
+        }
+
+        function getSignalIcon(rssi) {
+            if (rssi >= -60) return `<span class="signal-good">${svgHigh}</span>`;
+            if (rssi >= -75) return `<span class="signal-med">${svgMed}</span>`;
+            return `<span class="signal-bad">${svgLow}</span>`;
+        }
+
+        function selectNetwork(ssid, secure) {
+            document.getElementById('sta_ssid').value = ssid;
+            document.getElementById(secure ? 'sta_pass':'wifi_submit').focus();
+        }
+
+        function scanNetworks() {
+            var list = document.getElementById('wifi-list');
+            var btn = document.getElementById('btn-scan');
+            var loader = document.getElementById('loader');
+
+            list.style.display = 'none';
+            list.innerHTML = '';
+            loader.style.display = 'inline-block';
+            btn.disabled = true;
+
+            fetch('/scan_wifi')
+                .then(response => response.json())
+                .then(data => {
+                    loader.style.display = 'none';
+                    btn.disabled = false;
+                    list.style.display = 'block';
+
+                    if (data.length === 0) {
+                        list.innerHTML = '<li style="cursor:default">Nenhuma rede encontrada</li>';
+                        return;
+                    }
+
+                    data.sort((a, b) => b.rssi - a.rssi);
+
+                    data.forEach(net => {
+                        var li = document.createElement('li');
+                        var lockIcon = (net.secure == 1) ? svgLock : '';
+                        var signalHtml = getSignalIcon(net.rssi);
+
+                        li.innerHTML = `
+                            <div class="net-info">${lockIcon} <span>${net.ssid}</span></div>
+                            <div class="net-signal">${net.rssi} dBm ${signalHtml}</div>
+                        `;
+                        li.onclick = function() { selectNetwork(net.ssid, net.secure); };
+                        list.appendChild(li);
+                    });
+                })
+                .catch(err => {
+                    console.error(err);
+                    loader.style.display = 'none';
+                    btn.disabled = false;
+                    alert('Erro ao buscar redes.');
+                });
+        }
+
+        function togglePass(id) {
+            var x = document.getElementById(id);
+            if (x.type === "password") x.type = "text";
+            else x.type = "password";
+        }
+
+        function showPopup(title, message) {
+            document.getElementById('popup-title').innerText = title;
+            document.getElementById('popup-message').innerText = message;
+            document.getElementById('popup-modal').style.display = 'flex';
+        }
+
+        function closePopup() {
+            document.getElementById('popup-modal').style.display = 'none';
+        }
+
+        function submitFormAsync(event, formId, url, successTitle, successMessage) {
+            event.preventDefault(); // Evita recarregar a página
+            
+            var form = document.getElementById(formId);
+            var formData = new FormData(form);
+            // var searchParams = new URLSearchParams(formData); // Formata os dados para o ESP32 entender
+            
+            fetch(url, {
+                method: 'POST',
+                // body: searchParams
+                body: formData // Envia o FormData direto, sem converter para URLSearchParams!
+            })
+            .then(response => {
+                showPopup(successTitle, successMessage);
+            })
+            .catch(err => {
+                // Como o ESP32 vai dar ESP.restart(), a conexão pode ser cortada 
+                // antes da resposta chegar ao navegador. Assumimos sucesso.
+                showPopup(successTitle, successMessage);
+            });
+        }
+
+        // Exibe ou oculta a caixa de opções TLS dependendo da chave deslizante
+        function toggleTlsOptions() {
+            var useTls = document.getElementById("use_tls").checked;
+            var tlsOptions = document.getElementById("tls_options");
+            
+            if (useTls) {
+                tlsOptions.classList.remove("hidden");
+                toggleCertInputs(); // Atualiza a caixa de upload também
+            } else {
+                tlsOptions.classList.add("hidden");
+            }
+        }
+
+        // Exibe ou oculta os inputs de arquivo dependendo da seleção da lista
+        function toggleCertInputs() {
+            var certType = document.getElementById("cert_type").value;
+            var certUploads = document.getElementById("cert_uploads");
+            
+            if (certType === "custom") {
+                certUploads.classList.remove("hidden");
+            } else {
+                certUploads.classList.add("hidden");
+            }
+        }
+
+        function uploadOTA(event) {
+            event.preventDefault();
+            var fileInput = document.getElementById('ota_file').files[0];
+            if (!fileInput) { alert("Selecione um arquivo .bin"); return; }
+
+            var updateType = document.querySelector('input[name="update_type"]:checked').value;
+            var formData = new FormData();
+            formData.append("update", fileInput, fileInput.name);
+
+            var xhr = new XMLHttpRequest();
+            var progressBar = document.getElementById("ota-progress");
+            var statusText = document.getElementById("ota-status");
+            var submitBtn = document.getElementById("ota-submit");
+            
+            progressBar.style.display = "block";
+            statusText.style.display = "block";
+            submitBtn.disabled = true;
+
+            // Atualiza a barra de progresso
+            xhr.upload.addEventListener("progress", function(evt) {
+                if (evt.lengthComputable) {
+                    var percentComplete = (evt.loaded / evt.total) * 100;
+                    progressBar.value = percentComplete;
+                    statusText.innerHTML = "Enviando: " + Math.round(percentComplete) + "%";
+                }
+            }, false);
+
+            // Resposta do servidor
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    statusText.innerHTML = "Atualização concluída! Reiniciando...";
+                    statusText.style.color = "#28a745";
+                    setTimeout(function(){ window.location.reload(); }, 5000);
+                } else {
+                    statusText.innerHTML = "Erro na atualização.";
+                    statusText.style.color = "#dc3545";
+                    submitBtn.disabled = false;
+                }
+            };
+            
+            // Passamos o tipo (firmware ou spiffs) via query string na URL
+            xhr.open("POST", "/update?cmd=" + updateType, true);
+            xhr.send(formData);
+        }
+
+        // Garante que o estado seja avaliado logo que a página carregar
+        window.addEventListener('load', function() {
+            toggleTlsOptions();
+            toggleNetworkOptions();
+            toggleDhcpOptions('eth');  // Inicializa o visual do DHCP da Ethernet
+            toggleDhcpOptions('wifi'); // Inicializa o visual do DHCP do Wi-Fi
+        });
+
+        function restartAsync(event) {
+            event.preventDefault();
+            fetch('/restart')
+            .then(() => showPopup("Reiniciando", "A âncora está sendo reiniciada. Aguarde alguns segundos..."))
+            .catch(() => showPopup("Reiniciando", "A âncora está sendo reiniciada. Aguarde alguns segundos..."));
+        }
+
+        function factoryResetAsync(event) {
+            event.preventDefault();
+            fetch('/factory_reset')
+            .then(() => showPopup("Aplicando Padrões de Fábrica", "A âncora está sendo reiniciada. Aguarde alguns segundos..."))
+            .catch(() => showPopup("Aplicando Padrões de Fábrica", "A âncora está sendo reiniciada. Aguarde alguns segundos..."));
+        }
+    </script>
+</head>
+<body>
+    <div id="popup-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="popup-title">Sucesso</h3>
+            <p id="popup-message">Mensagem.</p>
+            <button class="modal-btn" onclick="closePopup()">OK</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <img src="LogoWK.png" alt="Logo WK" style="max-width: 50%; height: auto;">
+        <h2>Painel de Controle</h2>
+        <!-- <p>Conexão com o Wi-Fi: <strong>%WIFI_STATUS%</strong></p> -->
+
+        <h3>Interfaces de Rede</h3>
+        <p style="font-size: 0.9em; margin-top: -5px; color: #555;">Status da Conexão: <strong id="net-state">%NETWORK_STATE%</strong></p>
+        <form id="network-form" onsubmit="submitFormAsync(event, 'network-form', '/save_network', 'Rede Salva!', 'As configurações de rede foram salvas e a âncora está reiniciando.')">
+            
+            <div class="toggle-group">
+                <span>Habilitar Ethernet (Cabo)</span>
+                <label class="switch">
+                    <input type="checkbox" id="use_eth" name="use_eth" onchange="toggleNetworkOptions()" %ETH_CHECKED%>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div id="eth_config_section" class="hidden" style="background: #f9f9f9; padding: 10px; border-radius: 4px; margin: 10px 5%;">
+                <div class="toggle-group" style="margin: 0;">
+                    <span>Obter IP Automaticamente (DHCP)</span>
+                    <label class="switch">
+                        <input type="checkbox" id="eth_dhcp" name="eth_dhcp" onchange="toggleDhcpOptions('eth')" %ETH_DHCP_CHECKED%>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                
+                <div id="eth_static_fields" class="hidden">
+                    <label style="display:block; text-align:left; margin-top:10px; font-size: 0.9em;">Endereço IP:</label>
+                    <input type="text" name="eth_ip" placeholder="192.168.1.50" value="%ETH_IP%" style="width: 100%; margin: 5px 0;">
+                    
+                    <label style="display:block; text-align:left; font-size: 0.9em;">Máscara de Sub-rede:</label>
+                    <input type="text" name="eth_mask" placeholder="255.255.255.0" value="%ETH_MASK%" style="width: 100%; margin: 5px 0;">
+                    
+                    <label style="display:block; text-align:left; font-size: 0.9em;">Gateway Padrão:</label>
+                    <input type="text" name="eth_gw" placeholder="192.168.1.1" value="%ETH_GW%" style="width: 100%; margin: 5px 0;">
+                </div>
+            </div>
+            
+            <div class="toggle-group">
+                <span>Habilitar Wi-Fi</span>
+                <label class="switch">
+                    <input type="checkbox" id="use_wifi" name="use_wifi" onchange="toggleNetworkOptions()" %WIFI_CHECKED%>
+                    <span class="slider"></span>
+                </label>
+                
+            </div>
+
+            <p id="priority-note" style="font-size: 0.8em; color: #d9534f; margin: 10px 5%; text-align: justify; display: none;">
+                * Observação: Como ambas as interfaces estão habilitadas, a conexão via cabo Ethernet terá prioridade quando o cabo estiver conectado.
+            </p>
+
+            <div id="wifi_config_section" class="hidden" style="margin: 10px 5%;">
+                <!-- <h3 style="border-top: 1px dashed #ccc; margin-top: 15px;">Configuração Wi-Fi</h3> -->
+                <!-- <h4> Status: <strong>%WIFI_STATUS%</strong> </h4> -->
+                
+                <div style="padding: 10px;">
+                    <label for="sta_ssid" style="display:block; text-align:left;">Nome da rede Wi-Fi (SSID):</label>
+                    <input type="text" id="sta_ssid" name="sta_ssid" style="margin-left: 0; margin-right: 0; width: 100%;" placeholder="Nome da Rede" maxlength="31" value="%CURRENT_WIFI_SSID%">
+                    
+                    <button type="button" id="btn-scan" class="btn-scan" onclick="scanNetworks()">
+                        <div id="loader" class="loader"></div> Buscar Redes
+                    </button>
+                    
+                    <ul id="wifi-list"></ul>
+
+                    <label for="sta_pass" style="display:block; text-align:left; margin-top:10px;">Senha:</label>
+                    <input type="password" id="sta_pass" name="sta_pass" style="margin-left: 0; margin-right: 0; width: 100%;" placeholder="Senha da Rede" maxlength="63">
+                    
+                    <div style="text-align: left;">
+                        <input type='checkbox' id='showpassWifi' style="text-align: left; max-width: 13px;" onclick='togglePass("sta_pass")'>
+                        <label for='showpassWifi'>Exibir senha</label><br>
+                    </div>
+                </div>
+                <div style="background: #f9f9f9; padding: 10px; border-radius: 4px;">
+                    <div class="toggle-group" style="margin: 0;">
+                        <span>Obter IP Automaticamente (DHCP)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="wifi_dhcp" name="wifi_dhcp" onchange="toggleDhcpOptions('wifi')" %WIFI_DHCP_CHECKED%>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    
+                    <div id="wifi_static_fields" class="hidden">
+                        <label style="display:block; text-align:left; margin-top:10px; font-size: 0.9em;">Endereço IP:</label>
+                        <input type="text" name="wifi_ip" placeholder="192.168.1.50" value="%WIFI_IP%" style="width: 100%; margin: 5px 0;">
+                        
+                        <label style="display:block; text-align:left; font-size: 0.9em;">Máscara de Sub-rede:</label>
+                        <input type="text" name="wifi_mask" placeholder="255.255.255.0" value="%WIFI_MASK%" style="width: 100%; margin: 5px 0;">
+                        
+                        <label style="display:block; text-align:left; font-size: 0.9em;">Gateway Padrão:</label>
+                        <input type="text" name="wifi_gw" placeholder="192.168.1.1" value="%WIFI_GW%" style="width: 100%; margin: 5px 0;">
+                    </div>
+                </div>
+            </div>
+                     
+            <button type="submit" id="network_submit" style="margin-top: 20px;">Salvar Interfaces</button>
+        </form>
+        
+        <!-- <h3>Conexão com a rede Wi-Fi</h3>
+        <h4> Status: <strong>%WIFI_STATUS%</strong> </h4>
+        <form id="wifi-form" onsubmit="submitFormAsync(event, 'wifi-form', '/save_wifi', 'Wi-Fi Salvo!', 'As credenciais foram salvas e a âncora está reiniciando para conectar.')">
+            <label for="sta_ssid" style="display:block; text-align:left; margin-left:5%;">Nome da rede Wi-Fi (SSID):</label>
+            <input type="text" id="sta_ssid" name="sta_ssid" placeholder="Nome da Rede" required maxlength="31" value="%CURRENT_WIFI_SSID%">
+            
+            <button type="button" id="btn-scan" class="btn-scan" style="margin-left: 5%; margin-right: 5%; max-width: 90%;" onclick="scanNetworks()">
+                <div id="loader" class="loader"></div> Buscar Redes
+            </button>
+            
+            <ul id="wifi-list"></ul>
+
+            <label for="sta_pass" style="display:block; text-align:left; margin-left:5%; margin-top:10px;">Senha:</label>
+            <input type="password" id="sta_pass" name="sta_pass" placeholder="Senha da Rede" maxlength="63">
+            
+            <div style="text-align: left; margin-left: 5%;">
+                <input type='checkbox' id='showpassWifi' style="text-align: left; max-width: 13px;" onclick='togglePass("sta_pass")'>
+                <label for='showpassWifi'>Exibir senha</label><br>
+            </div>
+                     
+            <button type="submit" id="wifi_submit">Salvar e Conectar</button>
+        </form> -->
+
+        <h3>Conexão com o broker MQTT</h3>
+        <h4> Status: <strong>%MQTT_STATUS%</strong> </h4>
+        <form id="mqtt-form" onsubmit="submitFormAsync(event, 'mqtt-form', '/save_mqtt', 'MQTT Salvo!', 'Os dados do Broker MQTT foram salvos e a âncora irá reconectar automaticamente.')">
+            <label for="broker_path" style="display:block; text-align:left; margin-left:5%;">Endereço do Broker:</label>
+            <input type="text" id="broker_path" name="broker_path" placeholder="Endereço IP ou URL" required maxlength="60" value="%CURRENT_BROKER_PATH%">
+
+            <label for="broker_user" style="display:block; text-align:left; margin-left:5%; margin-top:10px;">Usuário:</label>
+            <input type="text" id="broker_user" name="broker_user" placeholder="Usuário do Broker" maxlength="31" value="%CURRENT_BROKER_USER%">
+
+            <label for="broker_pass" style="display:block; text-align:left; margin-left:5%; margin-top:10px;">Senha:</label>
+            <input type="password" id="broker_pass" name="broker_pass" placeholder="Senha do Broker" maxlength="63">
+            
+            <div style="text-align: left; margin-left: 5%;">
+                <input type='checkbox' id='showpassMqtt' style="text-align: left;max-width: 13px;margin-top: 0px;" onclick='togglePass("broker_pass")'>
+                <label for='showpassMqtt' style="display: inline; text-align: left;">Exibir senha</label><br>
+            </div>
+
+            <label for="broker_port" style="display:block; text-align:left; margin-left:5%; margin-top:10px;">Porta:</label>
+            <input type="number" id="broker_port" name="broker_port" placeholder="Número da porta" required maxlength="6" value="%CURRENT_BROKER_PORT%">
+
+            <label for="broker_topic_write" style="display:block; text-align:left; margin-left:5%; margin-top: 10px;">Tópico de escrita:</label>
+            <input type="text" id="broker_topic_write" name="broker_topic_write" placeholder="Endereço do tópico" required maxlength="31" value="%CURRENT_BROKER_TOPIC_WRITE%">
+            <br><label style="display:block; text-align:left; font-size: 0.70em; color: #666; margin-left:5%; margin-top: 0px;">Será adicionado o MacAddress: /%MAC_ADDRESS%</label>
+
+            <label for="broker_topic_read" style="display:block; text-align:left; margin-left:5%; margin-top: 10px;">Tópico de leitura:</label>
+            <input type="text" id="broker_topic_read" name="broker_topic_read" placeholder="Endereço do tópico" required maxlength="31" value="%CURRENT_BROKER_TOPIC_READ%">
+            <br><label style="display:block; text-align:left; font-size: 0.70em; color: #666; margin-left:5%; margin-top: 0px;">Será adicionado o MacAddress: /%MAC_ADDRESS%</label>
+            <div class="toggle-group">
+                <span>Usar conexão segura (TLS/SSL)</span>
+                <label class="switch">
+                    <input type="checkbox" id="use_tls" name="use_tls" onchange="toggleTlsOptions()" %TLS_CHECKED%>
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div id="tls_options" class="hidden">
+                <div class="toggle-group" style="font-weight: normal;">
+                    <span>Fonte do Certificado:</span>
+                    <select id="cert_type" name="cert_type" onchange="toggleCertInputs()" style="padding: 8px; border-radius: 4px; border: 1px solid #ccc; width: 55%;">
+                        <option value="factory" %CERT_FACTORY_SELECTED%>Fábrica (Embarcado)</option>
+                        <option value="custom" %CERT_CUSTOM_SELECTED%>Carregar Arquivos</option>
+                    </select>
+                </div>
+                
+                <div id="cert_uploads" class="hidden">
+                    <p style="font-size: 0.75em; color: #888; margin: 0 5%; text-align: left;">*Deixe em branco para manter os arquivos atuais salvos no dispositivo.</p>
+                    
+                    <div class="file-group">
+                        <label for="ca_cert">Root CA (.pem, .crt, .cer):</label>
+                        <input type="file" id="ca_cert" name="ca_cert" accept=".pem,.crt,.cer">
+                    </div>
+                    
+                    <div class="file-group">
+                        <label for="client_cert">Certificado do Cliente:</label>
+                        <input type="file" id="client_cert" name="client_cert" accept=".pem,.crt,.cer">
+                    </div>
+                    
+                    <div class="file-group">
+                        <label for="client_key">Chave Privada (.key, .pem):</label>
+                        <input type="file" id="client_key" name="client_key" accept=".pem,.key">
+                    </div>
+                </div>
+            </div>
+                     
+            <button type="submit" id="mqtt_submit">Salvar e Conectar</button>
+        </form>
+
+        <h3>Comandos</h3>
+        <form id="restart-form" onsubmit="restartAsync(event)">
+            <button type="submit">Reiniciar a Ancora</button>
+        </form>
+        <form id="factoryReset-form" onsubmit="factoryResetAsync(event)">
+            <button type="submit">Aplicar Padrões de Fábrica</button>
+        </form>
+
+        <h3>Atualização (OTA)</h3>
+        <form id="ota-form" onsubmit="uploadOTA(event)">
+            <div style="display: flex; align-items: center; justify-content: flex-start; gap: 20px; margin: 15px 5%;">
+                <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; margin: 0; cursor: pointer;">
+                    <input type="radio" name="update_type" value="firmware" checked style="width: auto; margin: 0; display: inline-block;">
+                    Firmware (.bin)
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; margin: 0; cursor: pointer;">
+                    <input type="radio" name="update_type" value="spiffs" style="width: auto; margin: 0; display: inline-block;">
+                    Arquivos HTML (SPIFFS)
+                </label>
+            </div>
+            
+            <input type="file" id="ota_file" accept=".bin" style="margin: 10px 5%; width: 90%;">
+            
+            <progress id="ota-progress" value="0" max="100" style="display:none; width: 90%; margin: 10px 5%;"></progress>
+            <p id="ota-status" style="display:none; font-size: 0.9em;"></p>
+            
+            <button type="submit" id="ota-submit">Atualizar</button>
+        </form>
+
+        <!-- RODAPÉ COM VERSÃO -->
+        <p style="text-align: center; color: #888; font-size: 0.8em; margin-top: 30px;">
+            Versão do Firmware: <strong>%FW_VERSION%</strong>
+        </p>
+    
+    </div>
+</body>
+</html>
