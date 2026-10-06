@@ -364,9 +364,9 @@
             document.getElementById('popup-modal').style.display = 'flex';
 
             if (autoRestart) {
-                document.getElementById('buttons').innerHTML = '<button class="btn-action btn-scan" onclick="closePopup(true)">OK</button>';
+                document.getElementById('buttons').innerHTML = '<button class="btn-action btn-scan" style="margin-bottom: 0px"; onclick="closePopup(true)">OK</button>';
             } else {
-                document.getElementById('buttons').innerHTML = '<button class="btn-action btn-scan" onclick="restartAsync(event)">Reiniciar Agora</button> <button class="btn-action btn-scan" onclick="closePopup()">Reiniciar mais Tarde</button>';
+                document.getElementById('buttons').innerHTML = '<button class="btn-action btn-scan" style="margin-bottom: 0px"; onclick="restartAsync(event)">Reiniciar Agora</button> <button class="btn-action btn-scan" btn-scan" style="margin-bottom: 0px" onclick="closePopup()">Reiniciar mais Tarde</button>';
             }
         }
 
