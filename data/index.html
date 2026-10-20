@@ -375,8 +375,33 @@
             if (needUpdate) { window.location.reload(); }
         }
 
+        function validarCertificados() {
+            var campos = ['ca_cert', 'client_cert', 'client_key'];
+            for (var i = 0; i < campos.length; i++) {
+                var input = document.getElementById(campos[i]);
+                
+                // Verifica se o input existe na página e se o usuário selecionou algum arquivo
+                if (input && input.files.length > 0) {
+                    var file = input.files[0];
+                    if (file.size > 5120) { // Limite exato de 5KB
+                        alert("Erro: O arquivo " + file.name + " excede o limite permitido de 5KB.");
+                        return false; 
+                    }
+                }
+            }
+            return true; // Todos os arquivos são válidos ou estão vazios (o que é permitido)
+        }
+
         function submitFormAsync(event, formId, url, successTitle, successMessage, autoRestart = false) {
             event.preventDefault(); 
+
+            // Verifica o tamanho dos arquivos de certificado e interrompe caso o tamanho ultrapasse o limite
+            if (formId === "mqtt-form") {
+                if (!validarCertificados()) {
+                    return; // Aborta a requisição HTTP instantaneamente (o alert já avisou o usuário)
+                }
+            }
+
             var form = document.getElementById(formId);
             var formData = new FormData(form);
             
@@ -412,6 +437,13 @@
             if (!fileInput) { alert("Selecione um arquivo .bin"); return; }
 
             var updateType = document.querySelector('input[name="update_type"]:checked').value;
+            
+            var maxSize = (updateType === "firmware") ? 1572864 : 967680;
+            if (fileInput.size > maxSize) {
+                alert("Erro: O arquivo excede o limite máximo permitido para " + updateType + ": " + (maxSize / 1024).toFixed(0) + "KB");
+                return; // Aborta o envio antes de gastar rede
+            }
+            
             var formData = new FormData();
             formData.append("update", fileInput, fileInput.name);
 

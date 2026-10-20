@@ -382,21 +382,29 @@ void NetworkConfigManager::handleSaveMQTT() {
 void NetworkConfigManager::handleMqttUpload() {
     HTTPUpload& upload = server.upload();
 
+    // Variáveis estáticas persistem entre os pacotes do mesmo arquivo
+    static size_t certBytesWritten = 0;
+    static bool certUploadAborted = false;
+    static String currentSavePath = "";
+
     // O recebimento do arquivo é feito em fragmentos, então o upload.status indica qual parte do pacote está sendo recebido.
     if (upload.status == UPLOAD_FILE_START) { //Primeiro pacote do arquivo -> Preparação do recebimento
         // Se o usuário não enviou nenhum arquivo no campo, o campo filename é vazio. Aborta para não criar arquivos em branco
         if (upload.filename.length() == 0) return; // Garante que não sobrescreva um certificado já salvo com um arquivo de 0 bytes.
 
+        certBytesWritten = 0;
+        certUploadAborted = false;
+
         String inputName = upload.name; // Recebe o atributo "name" do input HTML
-        String savePath = ""; // Caminho onde o arquivo será salvo no SPIFFS
+        currentSavePath = ""; // Caminho onde o arquivo será salvo no SPIFFS
 
         // Padronização dos nomes para não depender do nome do arquivo original criado pelo usuário
-        if (inputName == "ca_cert") savePath = "/ca.pem";
-        else if (inputName == "client_cert") savePath = "/client.pem";
-        else if (inputName == "client_key") savePath = "/key.pem";
-        else savePath = "/" + upload.filename;
+        if (inputName == "ca_cert") currentSavePath = "/ca.pem";
+        else if (inputName == "client_cert") currentSavePath = "/client.pem";
+        else if (inputName == "client_key") currentSavePath = "/key.pem";
+        else currentSavePath = "/" + upload.filename;
         
-        log_i("Recebendo certificado %s -> Salvando em: %s\n", upload.filename.c_str(), savePath.c_str());
+        log_i("Recebendo certificado %s -> Salvando em: %s\n", upload.filename.c_str(), currentSavePath.c_str());
 
         // Se já existir um arquivo aberto na memória de um pacote anterior que falhou, será fechado para não corromper o próximo arquivo que será salvo.
         if (uploadFile) {
@@ -404,18 +412,36 @@ void NetworkConfigManager::handleMqttUpload() {
         }
 
         // Abre o arquivo para escrita (sobrescreve se já existir)
-        uploadFile = SPIFFS.open(savePath, FILE_WRITE);
+        uploadFile = SPIFFS.open(currentSavePath, FILE_WRITE);
 
         if (!uploadFile) {
-            log_e("ERRO: Falha ao abrir %s para gravação no SPIFFS!", savePath.c_str());
+            log_e("ERRO: Falha ao abrir %s para gravação no SPIFFS!", currentSavePath.c_str());
         }
         
     } else if (upload.status == UPLOAD_FILE_WRITE) { // Pacotes intermediários do arquivo -> Adiciona no arquivo já criado
-        // Tenta escrever apenas se o arquivo foi criado com sucesso no passo anterior
+
+        if (certUploadAborted) return; // Se já estourou o limite de tamanho do arquivo, ignora o restante dos pacotes
+
+        certBytesWritten += upload.currentSize;
+
+        // Verifica o limite de 5KB (5120 bytes)
+        if (certBytesWritten > 5120) {
+            log_e("ERRO DE SEGURANÇA: Certificado %s excedeu 5KB. Abortando!", currentSavePath.c_str());
+            certUploadAborted = true;
+            if (uploadFile) {
+                uploadFile.close();
+                SPIFFS.remove(currentSavePath); // Deleta o pedaço do arquivo corrompido
+            }
+            return;
+        }
+
+        // Tenta escrever apenas se o arquivo foi criado com sucesso no passo anterior e não ultrapassou o limite de tamanho
         if (uploadFile) {
             uploadFile.write(upload.buf, upload.currentSize);
         }
     } else if (upload.status == UPLOAD_FILE_END) { // Último pacote do arquivo -> Fecha o arquivo e finaliza o upload
+        if (certUploadAborted) return; // Não finaliza se foi abortado
+
         if (uploadFile) {
             uploadFile.close();
             log_i("Upload concluído: %s (%u bytes)\n", upload.name.c_str(), upload.totalSize);
@@ -548,12 +574,21 @@ void NetworkConfigManager::handleOTAUpdate() {
 /* @brief Manipula o upload do arquivo de imagem da partição */
 void NetworkConfigManager::handleOTAUpload() {
     HTTPUpload& upload = server.upload();
+    static size_t otaBytesWritten = 0;
+    static size_t maxOtaLimit = 0;
+    static bool otaUploadAborted = false;
 
     if (upload.status == UPLOAD_FILE_START) {
+        otaBytesWritten = 0;
+        otaUploadAborted = false;
+
         log_i("Iniciando Atualizacao OTA: %s\n", upload.filename.c_str());
         
         // Verifica se o usuário selecionou Firmware ou SPIFFS através da URL (?cmd=spiffs)
         int cmd = (server.arg("cmd") == "spiffs") ? U_SPIFFS : U_FLASH;
+
+        // Define o limite de tamanho do arquivo de acordo com o tipo de atualização (Firmware ou SPIFFS)
+        maxOtaLimit = (cmd == U_SPIFFS) ? 967680 : 1572864;
 
         // Inicia a gravação (UPDATE_SIZE_UNKNOWN gerencia tamanhos dinâmicos)
         if (!Update.begin(UPDATE_SIZE_UNKNOWN, cmd)) { 
@@ -561,12 +596,25 @@ void NetworkConfigManager::handleOTAUpload() {
         }
     } 
     else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (otaUploadAborted) return; // Se já estourou o limite de tamanho do arquivo, ignora o restante dos pacotes
+
+        otaBytesWritten += upload.currentSize;
+
+        if (otaBytesWritten > maxOtaLimit) {
+            log_e("ERRO CRÍTICO: Arquivo maior que a partição alocada. Abortando!");
+            otaUploadAborted = true;
+            Update.abort(); // Interrompe a gravação e invalida a partição de update
+            return;
+        }
+
         // Grava os blocos conforme chegam da rede
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
             Update.printError(Serial);
         }
     } 
     else if (upload.status == UPLOAD_FILE_END) {
+        if (otaUploadAborted) return;
+        
         // Finaliza o bloco e configura o ESP para dar boot na nova partição
         if (Update.end(true)) { 
             log_i("Recebimento do arquivo concluído com sucesso! Tamanho total: %u bytes\n", upload.totalSize);

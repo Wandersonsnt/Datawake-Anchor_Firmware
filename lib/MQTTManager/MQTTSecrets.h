@@ -5,7 +5,7 @@
 // --- Certificados e Chaves ---
 // Importante: Manter o formato exato, incluindo \n e cabeçalhos/rodapés.
 // Certificado da Autoridade Certificadora (CA) do Broker
-const char* root_ca = \
+const char* factory_caCert = \
 "-----BEGIN CERTIFICATE-----\n" \
 "MIICPzCCAcWgAwIBAgIQBVVWvPJepDU1w6QP1atFcjAKBggqhkjOPQQDAzBhMQsw\n" \
 "CQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cu\n" \
@@ -23,7 +23,7 @@ const char* root_ca = \
 "-----END CERTIFICATE-----\n";
 
 // Certificado do Cliente (Client Certificate File).pem
-const char* client_cert = \
+const char* factory_clientCert = \
 "-----BEGIN CERTIFICATE-----\n" \
 "MIIDGzCCAgOgAwIBAgIUCYAfWAy06ngrXoCSO4rK9JkdaDwwDQYJKoZIhvcNAQEL\n" \
 "BQAwHTEbMBkGA1UEAwwSc3Vic2NyaWJlci1hdXRobklEMB4XDTI2MDUyOTE0MTMw\n" \
@@ -45,7 +45,7 @@ const char* client_cert = \
 "-----END CERTIFICATE-----\n";
 
 // Chave Privada do Cliente (Client Key File).key
-const char* client_key = \
+const char* factory_clientKey = \
 "-----BEGIN PRIVATE KEY-----\n" \
 "MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDU/8U674Xy9x+I\n" \
 "bgflQeph+5finaM98bHkv72sI2hXhTGG2ruN06xNmrw+FHwvAazLA4f/y0eE36EV\n" \

@@ -2,19 +2,19 @@
 #include <HardwareSerial.h>
 #include "driver/uart.h"
 #include "LocationProcessor.h" // Módulo que processa os dados recebidos, realiza filtro e gerencia o envio via MQTT
-#include "BatteryProcessor.h"
+#include "BatteryProcessor.h" // Módulo que processa os dados de nível de bateria recebidos, realiza filtro e gerencia o envio periodicamente
 #include "MQTTManager.h" // Biblioteca para gerenciar conexões e publicações MQTT
 #include "NetworkConfigManager.h" // Biblioteca para gerenciar a configuração de rede via webserver
 #include "ProjectConfig.h" // Configurações do projeto (constantes, pinos, etc)
 
-#define FIRMWARE_VERSION "1.0.4"
+#define FIRMWARE_VERSION "1.0.4" // Versão do firmware, utilizada para exibição no webserver de configuração e para controle de atualizações OTA
 
 NetworkConfigManager configManager; // Objeto para gerenciar a configuração de rede via webserver
-
 
 //Variáveis do servidor NTP para sincronização do relógio interno do ESP32, necessário para envio do timestamp para o broker
 time_t now; 
 
+// Variáveis de controle de conexão
 bool isMqttRunning = false;       // Flag para indicar se o MQTT foi iniciado
 bool connectedToNetwork = false;  // Flag para indicar conexão com a rede
 
@@ -24,7 +24,7 @@ HardwareSerial AnchorSerial(2);
 char uartBuffer[UART_BUFFER_SIZE];
 int uartIndex = 0;
 
-char anchor_id[32];
+char anchor_id[32]; // ID único da placa Ublox - array de antenas
 bool useRawAngles = false; // Variável para controlar se os ângulos brutos (raw) devem ser usados ou não
 
 
@@ -72,10 +72,10 @@ void anchorBlueLed(byte state){
 void configureUbloxBoard(){
   log_d("Configurando a âncora U-Blox...");
 
-  // Configura a âncora para enviar apenas os dados necessários (UUDF e UUDFP)
+  // Configura a âncora para enviar os dados necessários no formato correto (UUDF e UUDFP)
   AnchorSerial.write("\r"); // Limpa o buffer caso existiam dados antigos, garantindo que os próximos parâmetros serão aceitos
   delay(500);
-  AnchorSerial.write("AT+UDFCFG=5,1\r");    // Habilita o envio de dois angulos
+  AnchorSerial.write("AT+UDFCFG=5,1\r");    // Habilita o envio de dois ângulos
   delay(500);
   AnchorSerial.write("AT+UDFCFG=10,20\r");  // Fator para suavização de resultados (0-99). Quanto maior, mais suave será a leitura, porém mais lenta a movimentação.
   delay(500);
@@ -106,10 +106,17 @@ void mqttSendModule(const char *message){
  */
 void networkChanged(bool isConnected, String interfaceType) {
   if (isConnected) {
-    log_w("Rede operando via %s. Inicializando MQTT...\n", interfaceType.c_str());
+    log_w("Rede operando via %s.\n", interfaceType.c_str());
     connectedToNetwork = true;
+
+    //Força a reinicialização do MQTT caso a rede tenha mudado de interface (Wi-Fi para Ethernet ou vice-versa)
+    if (isMqttRunning) {
+      isMqttRunning = false;
+      log_w("Reiniciando MQTT devido a mudança de interface de rede...");
+      disableMQTT();
+    }
   } else {
-    log_e("Sem conexão de rede! Pausando envios U-Blox...");
+    log_e("Sem conexão de rede.");
     connectedToNetwork = false;
   }
 }
@@ -218,7 +225,7 @@ void anchorMqttCallback(char *topic, byte *payload, unsigned int length){
  * @param tag_id ID da tag
  * @param azimuth Azimute da tag
  * @param elevation Elevação da tag
- * @param rssi Intensidade do sinal recebido (RSSI)
+ * @param RSSI Intensidade do sinal recebido (RSSI)
  */
 void sendLocationToBroker(String tag_id, float azimuth, float elevation, float rssi, float min_azimuth, float max_azimuth, float min_elevation, float max_elevation, uint8_t samples) {
   // Preparação do Payload
@@ -387,7 +394,7 @@ void Publish_UUDF(const char *input){
   for (int i = 0; i < 12; i++) {
     tokens[i] = token;
     token = strtok(NULL, ",");
-    if (token == NULL && i >= 9){ //Termina de preencher o array caso a âncora esteja com o parametro 121 desabilitado (Neste caso os indices 10 e 11 não são enviados)
+    if (token == NULL && i >= 9){ //Termina de preencher o array caso a âncora esteja com o parâmetro 121 desabilitado (Neste caso os indices 10 e 11 não são enviados)
       tokens[10] = tokens[2]; // Copia o valor de azimuth para azimuth_raw
       tokens[11] = tokens[3]; // Copia o valor de elevation para elevation_raw
       break;
@@ -463,7 +470,7 @@ void setup(){
   }, "ConfigManagLoop", 4096, NULL, 1, NULL, 0);
 
   /* MQTT */
-  // Nesse momento o dispositivo está sem conexão de rede pois as funções Ethernet e Wifi não são bloqueantes
+  // Nesse momento o dispositivo está sem conexão de rede pois as funções Ethernet e WiFi não são bloqueantes
   // A conexão será realizada no loop() quando a rede for estabelecida
   
   /* Algoritmo de filtro e envio dos dados processados */
@@ -486,7 +493,9 @@ void loop(){
       isMqttRunning = true; // Salva que o MQTT foi iniciado (independente se conectou ou não)
     }   
 
-    loopMQTTManager(); //Processa a conexão MQTT em background e realiza reconexão se necessário
+    if (isMqttRunning){ // Apenas processa o MQTT se ele foi iniciado
+      loopMQTTManager(); //Processa a conexão MQTT em background e realiza reconexão se necessário
+    }
 
     if(!isMQTTConnected()){
       anchorRedLed(true); // Acende o LED vermelho para indicar que a âncora perdeu a conexão com o MQTT
@@ -507,13 +516,15 @@ void loop(){
 
           if (strstr(uartBuffer, "UUDF:")) Publish_UUDF(uartBuffer); // Dados de localização
           else if (strstr(uartBuffer, "UUDFP") != NULL) Publish_UUDFP(uartBuffer); // Dados de nível de bateria
-          else if ((strstr(uartBuffer, "OK") == NULL) && !containsAT(uartBuffer) && !isEmptyOrSpaces(uartBuffer)) { // Retorno de comandos (não é necessário tranmitir para o broker)
+          else if ((strstr(uartBuffer, "OK") == NULL) && !containsAT(uartBuffer) && !isEmptyOrSpaces(uartBuffer)) { // Retorno de comandos
             char topic[64];
             snprintf(topic, sizeof(topic), configManager.getBrokerTopicWrite().c_str());
-            // mqtt.publish(topic, uartBuffer);
             String content = "{\"type\":12,\"content\":\"" + String(uartBuffer) + "\"}";
             mqttSendModule(content.c_str());
           }
+
+          // Imprime memória livre no heap para monitoramento
+          log_d("Memória livre no heap: %d bytes", ESP.getFreeHeap());
 
           uartIndex = 0;
         } else if (c != '\r') {
